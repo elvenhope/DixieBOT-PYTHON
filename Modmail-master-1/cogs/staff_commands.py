@@ -282,6 +282,54 @@ class StaffCommands(commands.Cog):
             f"✅ Ticket has been transferred to {new_mod.mention}.\n"
             f"They are now responsible for this ticket."
         )
+    
+    @commands.command(name="contact")
+    @commands.has_permissions(manage_guild=True)
+    async def contact_user(self, ctx, user_id: int, *, message: str):
+        try:
+            user = await self.bot.fetch_user(user_id)
+            if not user:
+                await ctx.send(embed=self.build_embed(
+                    "Contact Failed",
+                    f"User with ID `{user_id}` could not be found.",
+                    discord.Color.red(),
+                    ctx.author
+                ))
+                return
+
+            try:
+                user_embed = self.build_embed(
+                    title="",
+                    description=message,
+                    color=discord.Color.orange(),
+                    author=self.bot.user
+                )
+                await user.send(embed=user_embed)
+
+                staff_embed = self.build_embed(
+                    title="Message Sent",
+                    description=f"✅ Successfully sent message to <@{user_id}>:\n\n{message}",
+                    color=discord.Color.green(),
+                    author=ctx.author
+                )
+                await ctx.send(embed=staff_embed)
+
+            except discord.Forbidden:
+                await ctx.send(embed=self.build_embed(
+                    "Delivery Failed",
+                    f"❌ Could not DM <@{user_id}>. They may have DMs disabled.",
+                    discord.Color.red(),
+                    ctx.author
+                ))
+
+        except Exception as e:
+            await ctx.send(embed=self.build_embed(
+                "Error",
+                str(e),
+                discord.Color.red(),
+                ctx.author
+            ))
+
        
 
 
