@@ -1,0 +1,41 @@
+# Environment & secrets
+.env
+*.env
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache/compiled files
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Bytecode & build artifacts
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# IDEs & editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs & misc
+*.log
+*.sqlite3
+*.db
