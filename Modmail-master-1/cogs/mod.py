@@ -320,6 +320,24 @@ class Mod(commands.Cog):
         except discord.Forbidden:
             await ctx.send(embed=discord.Embed(description=f'Could not send DM to {member.mention}, they might have DMs disabled.', color=discord.Color.red()))
 
+    @commands.command(name="contact")
+    @commands.has_any_role(MODS_ROLE_ID, ADMINS_ROLE_ID, CO_OWNERS_ROLE_ID, OWNERS_ROLE_ID, BOT_MANAGER_ID)
+    async def contact(self, ctx, user_id: int, *, message: str):
+        try:
+            user = await self.bot.fetch_user(user_id)
+            if not user:
+                await ctx.send(embed=discord.Embed(description="❌ User not found.", color=discord.Color.red()))
+                return
+
+            try:
+                await user.send(f"📩 Message from the moderation team in **{ctx.guild.name}**:\n\n{message}")
+                await ctx.send(embed=discord.Embed(description=f"✅ Successfully sent message to <@{user_id}>.", color=discord.Color.green()))
+            except discord.Forbidden:
+                await ctx.send(embed=discord.Embed(description=f"❌ Could not send DM to <@{user_id}>. They might have DMs disabled.", color=discord.Color.red()))
+
+        except Exception as e:
+            await ctx.send(embed=discord.Embed(description=f"⚠️ Error: {str(e)}", color=discord.Color.red()))
+
 
 async def setup(bot):
     await bot.add_cog(Mod(bot))
