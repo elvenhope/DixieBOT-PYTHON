@@ -164,16 +164,13 @@ class StaffCommands(commands.Cog):
                 return
 
             try:
-                files = []
+                # Take the first image attachment for the embed, if any
                 image_url = None
                 if ctx.message.attachments:
                     for attachment in ctx.message.attachments:
-                        if attachment.content_type and attachment.content_type.startswith("image/") and not image_url:
-                            # Use first image in the embed
+                        if attachment.content_type and attachment.content_type.startswith("image/"):
                             image_url = attachment.url
-                        # Forward all attachments as files too
-                        fp = await attachment.to_file()
-                        files.append(fp)
+                            break  # only the first image
 
                 # --- DM embed to user ---
                 user_embed = self.build_embed(
@@ -185,12 +182,12 @@ class StaffCommands(commands.Cog):
                 if image_url:
                     user_embed.set_image(url=image_url)
 
-                user_msg = await user.send(embed=user_embed, files=files if files else None)
+                user_msg = await user.send(embed=user_embed)
 
                 # --- Staff embed in ticket channel ---
                 staff_embed = self.build_embed(
                     title="",
-                    description="STAFF RESPONSE:\n" + (message or ""),
+                    description="STAFF RESPONSE:\n" + message,
                     color=discord.Color.green(),
                     author=ctx.author
                 )
@@ -198,15 +195,14 @@ class StaffCommands(commands.Cog):
                     staff_embed.set_image(url=image_url)
                 staff_embed.set_footer(text=f"DixieMsgCode:{user_msg.id}")
 
-                await ctx.channel.send(embed=staff_embed, files=files if files else None)
+                await ctx.channel.send(embed=staff_embed)
 
             except Exception as e:
-                error_embed = self.build_embed(
+                await ctx.send(embed=self.build_embed(
                     title="Error",
                     description=f"Failed to send reply: {e}",
                     color=discord.Color.red()
-                )
-                await ctx.send(embed=error_embed)
+                ))
         else:
             await ctx.send("This command can only be used in a ticket channel.")
 
@@ -222,6 +218,7 @@ class StaffCommands(commands.Cog):
                 return
 
             replied_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+
             msg_id = (
                 replied_msg.embeds[0].footer.text.replace("DixieMsgCode:", "").strip()
                 if replied_msg.embeds and replied_msg.embeds[0].footer and "DixieMsgCode:" in replied_msg.embeds[0].footer.text
@@ -240,47 +237,42 @@ class StaffCommands(commands.Cog):
                 await ctx.send("Unable to find the user from this ticket channel.")
                 return
 
-            # Get old DM
+            # Fetch the old DM message
             dm_channel = await user.create_dm()
             target_msg = await dm_channel.fetch_message(int(msg_id))
             old_embed = target_msg.embeds[0]
 
-            # --- Gather attachments ---
-            files = []
-            image_url = None
+            # Preserve existing image unless a new one is provided
+            image_url = old_embed.image.url if old_embed.image else None
             if ctx.message.attachments:
                 for attachment in ctx.message.attachments:
-                    if attachment.content_type and attachment.content_type.startswith("image/") and not image_url:
-                        image_url = attachment.url  # first image for embed
-                    fp = await attachment.to_file()
-                    files.append(fp)
+                    if attachment.content_type and attachment.content_type.startswith("image/"):
+                        image_url = attachment.url
+                        break
 
-            # --- Build updated embed for DM ---
+            # Use old text if no new text provided
+            description = new_message if new_message.strip() else old_embed.description
+
+            # --- Update DM embed ---
             new_embed = discord.Embed(
                 title=old_embed.title,
-                description=new_message,
+                description=description,
                 color=discord.Color.orange(),
-                timestamp=discord.utils.utcnow()
+                timestamp=old_embed.timestamp
             )
             if old_embed.author:
                 new_embed.set_author(name=old_embed.author.name, icon_url=old_embed.author.icon_url)
             if old_embed.footer:
                 new_embed.set_footer(text=old_embed.footer.text, icon_url=old_embed.footer.icon_url)
-
-            # Only set image if a new one was provided
             if image_url:
                 new_embed.set_image(url=image_url)
 
             await target_msg.edit(embed=new_embed)
 
-            # If there are extra files, send them separately
-            if files:
-                await dm_channel.send(files=files)
-
-            # --- Update staff message in ticket channel ---
+            # --- Update staff embed in ticket channel ---
             staff_embed = discord.Embed(
                 title=replied_msg.embeds[0].title,
-                description=new_message,
+                description=description,
                 color=discord.Color.green(),
                 timestamp=discord.utils.utcnow()
             )
@@ -299,8 +291,8 @@ class StaffCommands(commands.Cog):
 
             await replied_msg.edit(embed=staff_embed)
 
-            if files:
-                await ctx.channel.send(files=files)
+            # Delete the staff command message
+            await ctx.message.delete()
 
         except Exception as e:
             await ctx.send(embed=self.build_embed(
@@ -308,6 +300,9 @@ class StaffCommands(commands.Cog):
                 description=str(e),
                 color=discord.Color.red()
             ))
+
+
+
 
 
     @commands.command(name="transfer")
