@@ -155,36 +155,50 @@ class StaffCommands(commands.Cog):
         # If no DB premade response found, continue processing other commands normally
         # await self.bot.process_commands(message)
 
-    @commands.command(name='r')
-    async def reply_to_user(self, ctx, *, message: str):
+    @commands.command(name="r")
+    async def reply_to_user(self, ctx, *, message: str = ""):
         if isinstance(ctx.channel, TextChannel):
-            # record = await self.bot.db.get_ticket_by_channel(ctx.channel.id)
-            # if record and record['mod_id'] and ctx.author.id != record['mod_id']:
-            #     await ctx.send("❌ You are not assigned to this ticket.")
-            #     return
-
             user = await self.get_user_from_channel(ctx.channel)
             if not user:
                 await ctx.send("Unable to find the user from this ticket channel.")
                 return
 
             try:
+                files = []
+                image_url = None
+                if ctx.message.attachments:
+                    for attachment in ctx.message.attachments:
+                        if attachment.content_type and attachment.content_type.startswith("image/") and not image_url:
+                            # Use first image in the embed
+                            image_url = attachment.url
+                        # Forward all attachments as files too
+                        fp = await attachment.to_file()
+                        files.append(fp)
+
+                # --- DM embed to user ---
                 user_embed = self.build_embed(
                     title="",
                     description=message,
                     color=discord.Color.orange(),
                     author=self.bot.user
                 )
-                user_msg = await user.send(embed=user_embed)
+                if image_url:
+                    user_embed.set_image(url=image_url)
 
+                user_msg = await user.send(embed=user_embed, files=files if files else None)
+
+                # --- Staff embed in ticket channel ---
                 staff_embed = self.build_embed(
                     title="",
-                    description="STAFF RESPONSE: \n" + message,
+                    description="STAFF RESPONSE:\n" + (message or ""),
                     color=discord.Color.green(),
                     author=ctx.author
                 )
+                if image_url:
+                    staff_embed.set_image(url=image_url)
                 staff_embed.set_footer(text=f"DixieMsgCode:{user_msg.id}")
-                await ctx.channel.send(embed=staff_embed)
+
+                await ctx.channel.send(embed=staff_embed, files=files if files else None)
 
             except Exception as e:
                 error_embed = self.build_embed(
@@ -196,8 +210,8 @@ class StaffCommands(commands.Cog):
         else:
             await ctx.send("This command can only be used in a ticket channel.")
 
-    @commands.command(name='re')
-    async def edit_reply(self, ctx, *, new_message: str):
+    @commands.command(name="re")
+    async def edit_reply(self, ctx, *, new_message: str = ""):
         try:
             if not ctx.message.reference or not isinstance(ctx.message.reference.resolved, discord.Message):
                 await ctx.send(embed=self.build_embed(
@@ -208,9 +222,11 @@ class StaffCommands(commands.Cog):
                 return
 
             replied_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-
-            msg_id = replied_msg.embeds[0].footer.text.replace("DixieMsgCode:", "").strip() if replied_msg.embeds and replied_msg.embeds[0].footer and "DixieMsgCode:" in replied_msg.embeds[0].footer.text else None
-
+            msg_id = (
+                replied_msg.embeds[0].footer.text.replace("DixieMsgCode:", "").strip()
+                if replied_msg.embeds and replied_msg.embeds[0].footer and "DixieMsgCode:" in replied_msg.embeds[0].footer.text
+                else None
+            )
             if not msg_id:
                 await ctx.send(embed=self.build_embed(
                     title="Error",
@@ -224,37 +240,67 @@ class StaffCommands(commands.Cog):
                 await ctx.send("Unable to find the user from this ticket channel.")
                 return
 
+            # Get old DM
             dm_channel = await user.create_dm()
             target_msg = await dm_channel.fetch_message(int(msg_id))
-
-            # Edit the previous embed in the user's DM
             old_embed = target_msg.embeds[0]
+
+            # --- Gather attachments ---
+            files = []
+            image_url = None
+            if ctx.message.attachments:
+                for attachment in ctx.message.attachments:
+                    if attachment.content_type and attachment.content_type.startswith("image/") and not image_url:
+                        image_url = attachment.url  # first image for embed
+                    fp = await attachment.to_file()
+                    files.append(fp)
+
+            # --- Build updated embed for DM ---
             new_embed = discord.Embed(
                 title=old_embed.title,
                 description=new_message,
                 color=discord.Color.orange(),
-                timestamp=old_embed.timestamp
+                timestamp=discord.utils.utcnow()
             )
             if old_embed.author:
                 new_embed.set_author(name=old_embed.author.name, icon_url=old_embed.author.icon_url)
             if old_embed.footer:
                 new_embed.set_footer(text=old_embed.footer.text, icon_url=old_embed.footer.icon_url)
 
+            # Only set image if a new one was provided
+            if image_url:
+                new_embed.set_image(url=image_url)
+
             await target_msg.edit(embed=new_embed)
 
-            # Edit the staff message in the ticket channel as well
+            # If there are extra files, send them separately
+            if files:
+                await dm_channel.send(files=files)
+
+            # --- Update staff message in ticket channel ---
             staff_embed = discord.Embed(
                 title=replied_msg.embeds[0].title,
                 description=new_message,
                 color=discord.Color.green(),
-                timestamp=replied_msg.embeds[0].timestamp
+                timestamp=discord.utils.utcnow()
             )
             if replied_msg.embeds[0].author:
-                staff_embed.set_author(name=replied_msg.embeds[0].author.name, icon_url=replied_msg.embeds[0].author.icon_url)
+                staff_embed.set_author(
+                    name=replied_msg.embeds[0].author.name,
+                    icon_url=replied_msg.embeds[0].author.icon_url
+                )
             if replied_msg.embeds[0].footer:
-                staff_embed.set_footer(text=replied_msg.embeds[0].footer.text, icon_url=replied_msg.embeds[0].footer.icon_url)
+                staff_embed.set_footer(
+                    text=replied_msg.embeds[0].footer.text,
+                    icon_url=replied_msg.embeds[0].footer.icon_url
+                )
+            if image_url:
+                staff_embed.set_image(url=image_url)
 
             await replied_msg.edit(embed=staff_embed)
+
+            if files:
+                await ctx.channel.send(files=files)
 
         except Exception as e:
             await ctx.send(embed=self.build_embed(
@@ -262,6 +308,7 @@ class StaffCommands(commands.Cog):
                 description=str(e),
                 color=discord.Color.red()
             ))
+
 
     @commands.command(name="transfer")
     @commands.has_permissions(manage_channels=True)

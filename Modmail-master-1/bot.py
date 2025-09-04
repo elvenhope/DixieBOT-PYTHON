@@ -153,14 +153,33 @@ class ModmailBot(commands.Bot):
 
                 # --- END NEW LOGIC ---
 
-                # Forward user message into the ticket channel
                 embed = self.build_embed(
                     title="",
-                    description=f"**USER MESSAGE:**\n{message.content}",
+                    description=f"**USER MESSAGE:**\n{message.content if message.content else ''}",
                     color=discord.Color.blue(),
                     author=user
                 )
+
+                # If there is at least one image attachment, set it as the embed image
+                if message.attachments:
+                    first_attachment = message.attachments[0]
+                    if first_attachment.content_type and first_attachment.content_type.startswith("image/"):
+                        embed.set_image(url=first_attachment.url)
+
                 await channel.send(embed=embed)
+
+                # If there are more attachments (images or files), send them separately
+                if len(message.attachments) > 1:
+                    files = []
+                    for attachment in message.attachments[1:]:
+                        try:
+                            fp = await attachment.to_file()
+                            files.append(fp)
+                        except Exception as e:
+                            logger.warning(f"Failed to forward attachment: {e}")
+                    if files:
+                        await channel.send(content="📎 Additional attachments:", files=files)
+
                 return  # Don't send welcome menu again
 
         # No open ticket → send welcome embed + ticket category options
