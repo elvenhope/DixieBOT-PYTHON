@@ -6,6 +6,7 @@ import io
 import os
 import json
 from datetime import datetime, timedelta, timezone
+from bot import ClaimTicketButton
 
 TRANSCRIPT_DIR = "logs"
 PREMADE_PATH = "replies.json"
@@ -340,8 +341,8 @@ class StaffCommands(commands.Cog):
                 ))
                 return
 
-            guild = self.bot.get_guild(self.bot.modmail.guild_id)
-            category = guild.get_channel(self.bot.modmail.category_id)
+            guild = self.bot.get_guild(1346839676333461625)
+            category = guild.get_channel(1346881466881146910)
             if not category or not isinstance(category, discord.CategoryChannel):
                 await ctx.send(embed=self.build_embed(
                     "Error",
@@ -366,7 +367,13 @@ class StaffCommands(commands.Cog):
             )
 
             # Save ticket in DB
-            await self.bot.db.create_ticket(ticket_channel.id, user.id, ctx.author.id)
+            await self.bot.db.create_ticket_entry(
+                user=user,
+                channel=ticket_channel,
+                category_id=category.id,
+                ticket_type="contact"
+            )
+
 
             # Notify staff
             staff_embed = self.build_embed(
@@ -375,7 +382,7 @@ class StaffCommands(commands.Cog):
                 discord.Color.green(),
                 ctx.author
             )
-            await ticket_channel.send(embed=staff_embed)
+            await ticket_channel.send(embed=staff_embed, view=ClaimTicketButton(ticket_channel.id))
 
             # DM user
             try:
