@@ -233,15 +233,46 @@ class Modmail(commands.Cog):
             await channel.delete()
             del self.suspended_tickets[channel.id]
 
-    @commands.command(name='notifyme')
+    @commands.command(name="notifyme")
     @commands.has_permissions(manage_channels=True)
     async def notify_me(self, ctx):
-        await self.bot.db.add_watcher(ctx.channel.id, ctx.author.id)
-        embed = discord.Embed(
-            description="✅ You'll be notified when the user responds.",
-            color=discord.Color.green(),
-            timestamp=datetime.now(timezone.utc)
-        )
+        watchers = await self.bot.db.get_watchers(ctx.channel.id)
+
+        if ctx.author.id in watchers:
+            embed = discord.Embed(
+                description="⚠️ You're already subscribed to notifications for this ticket.",
+                color=discord.Color.orange(),
+                timestamp=datetime.now(timezone.utc)
+            )
+        else:
+            await self.bot.db.add_watcher(ctx.channel.id, ctx.author.id)
+            embed = discord.Embed(
+                description="✅ You'll be notified when the user responds.",
+                color=discord.Color.green(),
+                timestamp=datetime.now(timezone.utc)
+            )
+
+        await ctx.send(embed=embed)
+
+    @commands.command(name="cancelnotifyme")
+    @commands.has_permissions(manage_channels=True)
+    async def cancel_notify_me(self, ctx):
+        watchers = await self.bot.db.get_watchers(ctx.channel.id)
+
+        if ctx.author.id not in watchers:
+            embed = discord.Embed(
+                description="⚠️ You are not subscribed to notifications for this ticket.",
+                color=discord.Color.orange(),
+                timestamp=datetime.now(timezone.utc)
+            )
+        else:
+            await self.bot.db.remove_watcher(ctx.channel.id, ctx.author.id)
+            embed = discord.Embed(
+                description="❌ You will no longer be notified when the user responds.",
+                color=discord.Color.red(),
+                timestamp=datetime.now(timezone.utc)
+            )
+
         await ctx.send(embed=embed)
 
 

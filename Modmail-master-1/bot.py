@@ -148,7 +148,7 @@ class ModmailBot(commands.Bot):
 
                 if len(mentions) > 0:
                     await channel.send(f"🔔 User responded! Notifying: {' '.join(mentions)}")
-                    await self.db.remove_watcher(channel_id, watcher_id)  # remove after notifying
+                    # await self.db.remove_watcher(channel_id, watcher_id)  # remove after notifying
                     mentions = []  # clear mentions to avoid duplicate notifications
 
                 # --- END NEW LOGIC ---
