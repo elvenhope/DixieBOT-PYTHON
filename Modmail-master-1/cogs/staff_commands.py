@@ -327,7 +327,8 @@ class StaffCommands(commands.Cog):
     
     @commands.command(name="contact")
     @commands.has_permissions(manage_guild=True)
-    async def contact_user(self, ctx, user_id: int, *, message: str):
+    async def contact_user(self, ctx, user_id: int, *, reason: str = "No reason provided"):
+        """Open a ticket with a user from staff side (reverse modmail)."""
         try:
             user = await self.bot.fetch_user(user_id)
             if not user:
@@ -339,30 +340,65 @@ class StaffCommands(commands.Cog):
                 ))
                 return
 
-            try:
-                user_embed = self.build_embed(
-                    title="",
-                    description=message,
-                    color=discord.Color.orange(),
-                    author=self.bot.user
-                )
-                await user.send(embed=user_embed)
-
-                staff_embed = self.build_embed(
-                    title="Message Sent",
-                    description=f"✅ Successfully sent message to <@{user_id}>:\n\n{message}",
-                    color=discord.Color.green(),
-                    author=ctx.author
-                )
-                await ctx.send(embed=staff_embed)
-
-            except discord.Forbidden:
+            guild = self.bot.get_guild(self.bot.modmail.guild_id)
+            category = guild.get_channel(self.bot.modmail.category_id)
+            if not category or not isinstance(category, discord.CategoryChannel):
                 await ctx.send(embed=self.build_embed(
-                    "Delivery Failed",
-                    f"❌ Could not DM <@{user_id}>. They may have DMs disabled.",
+                    "Error",
+                    "Ticket category could not be found.",
                     discord.Color.red(),
                     ctx.author
                 ))
+                return
+
+            # Create the channel
+            channel_name = f"dx-{user.name}".replace(" ", "-").lower()
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                ctx.author: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+            ticket_channel = await guild.create_text_channel(
+                name=channel_name,
+                category=category,
+                overwrites=overwrites,
+                topic=f"Contact ticket with {user} ({user.id})"
+            )
+
+            # Save ticket in DB
+            await self.bot.db.create_ticket(ticket_channel.id, user.id, ctx.author.id)
+
+            # Notify staff
+            staff_embed = self.build_embed(
+                "Contact Ticket Opened",
+                f"A new contact ticket has been opened with {user.mention}.\nReason: {reason}",
+                discord.Color.green(),
+                ctx.author
+            )
+            await ticket_channel.send(embed=staff_embed)
+
+            # DM user
+            try:
+                user_embed = self.build_embed(
+                    "Staff Contact",
+                    f"Our staff has opened a ticket with you:\n\n{reason}",
+                    discord.Color.orange(),
+                    self.bot.user
+                )
+                await user.send(embed=user_embed)
+            except discord.Forbidden:
+                await ticket_channel.send(embed=self.build_embed(
+                    "DM Failed",
+                    "❌ Could not DM the user (they may have DMs disabled).",
+                    discord.Color.red()
+                ))
+
+            await ctx.send(embed=self.build_embed(
+                "Success",
+                f"Ticket opened with {user.mention} in {ticket_channel.mention}.",
+                discord.Color.green(),
+                ctx.author
+            ))
 
         except Exception as e:
             await ctx.send(embed=self.build_embed(
@@ -371,6 +407,7 @@ class StaffCommands(commands.Cog):
                 discord.Color.red(),
                 ctx.author
             ))
+
 
        
 
