@@ -111,47 +111,62 @@ class StaffCommands(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if not message.content.startswith("!") or message.author.bot:
-            # print("asdas")
             return
 
         ctx = await self.bot.get_context(message)
         cmd_key = message.content[1:].split()[0]
 
-        # print(f"Command key: {cmd_key}")
+        # Get premade response
+        response = await self.bot.db.get_dx_response(cmd_key)
+        if not response:
+            return
 
-        # Only handle premade responses in ticket channels starting with "dx-"
-        if isinstance(ctx.channel, discord.TextChannel) and ctx.channel.name.startswith("dx-"):
-            response = await self.bot.db.get_dx_response(cmd_key)
-            if response:
+        # Check if it's a ticket channel (starts with "dx-")
+        is_ticket_channel = isinstance(ctx.channel, discord.TextChannel) and ctx.channel.name.startswith("dx-")
+
+        try:
+            if is_ticket_channel:
+                # Send to user
                 user = await self.get_user_from_channel(ctx.channel)
                 if not user:
                     await ctx.send("Unable to find the user from this ticket channel.")
                     return
 
-                try:
-                    embed_user = self.build_embed(
-                        "",
-                        response,
-                        discord.Color.orange(),
-                        self.bot.user
-                    )
-                    user_msg = await user.send(embed=embed_user)
+                embed_user = self.build_embed(
+                    "",
+                    response,
+                    discord.Color.orange(),
+                    self.bot.user
+                )
+                user_msg = await user.send(embed=embed_user)
 
-                    embed_staff = self.build_embed(
-                        f"Premade Reply `{cmd_key}` Sent",
-                        response,
-                        discord.Color.green(),
-                        ctx.author
-                    )
-                    embed_staff.set_footer(text=f"DixieMsgCode:{user_msg.id}")
-                    await ctx.channel.send(embed=embed_staff)
-                except Exception as e:
-                    await ctx.send(embed=self.build_embed(
-                        "Failed to Send",
-                        str(e),
-                        discord.Color.red()
-                    ))
-                return
+                # Send confirmation to staff channel
+                embed_staff = self.build_embed(
+                    f"Premade Reply `{cmd_key}` Sent",
+                    response,
+                    discord.Color.green(),
+                    ctx.author
+                )
+                embed_staff.set_footer(text=f"DixieMsgCode:{user_msg.id}")
+                await ctx.channel.send(embed=embed_staff)
+
+            else:
+                # Not a ticket channel → only post in current channel
+                embed = self.build_embed(
+                    f"Premade Reply `{cmd_key}`",
+                    response,
+                    discord.Color.green(),
+                    ctx.author
+                )
+                await ctx.channel.send(embed=embed)
+
+        except Exception as e:
+            await ctx.send(embed=self.build_embed(
+                "Failed to Send",
+                str(e),
+                discord.Color.red()
+            ))
+
 
         # If no DB premade response found, continue processing other commands normally
         # await self.bot.process_commands(message)
