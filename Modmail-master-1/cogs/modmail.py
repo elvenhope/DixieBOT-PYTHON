@@ -163,19 +163,9 @@ class Modmail(commands.Cog):
 
     @commands.command(name="suspend")
     @commands.has_permissions(manage_channels=True)
-    async def suspend_ticket(self, ctx, time: str = None):
-        if not time:
-            embed = discord.Embed(
-                description="Usage: `!suspend hh:mm`",
-                color=discord.Color.orange(),
-                timestamp=datetime.now(timezone.utc)
-            )
-            await ctx.send(embed=embed)
-            return
-
+    async def suspend_ticket(self, ctx):
         try:
-            hours, minutes = map(int, time.split(":"))
-            delay = hours * 3600 + minutes * 60
+            delay = 86400
         except ValueError:
             embed = discord.Embed(
                 description="Invalid format. Use `hh:mm`.",
