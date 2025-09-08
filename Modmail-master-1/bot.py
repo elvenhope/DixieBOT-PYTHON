@@ -1,6 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 import asyncio
+import random as rnd
 import discord
 from discord.ext import commands
 from aiohttp import ClientSession
@@ -28,6 +29,35 @@ CATEGORY_IDS = {
     "ko-fi": 1402348823598203061,
     "nsfw": 1346881386510024745,
 }
+
+TICKET_MESSAGES = [
+    "This ticket's been sitting longer than Dixie's sourdough starter. Claim it before it grows legs.",
+    "If this ticket waits any longer, it's gonna start charging rent.",
+    "This ticket has been here so long, cheesecake made it breakfast",
+    "Dixie's hat has seen more action than this staff team today... 😮‍💨",
+    "This ticket's been here for so long, it's writing its own diary entry",
+    "Apchuu!, its getting dusty in here",
+    "This ticket's aging like tart filling in the sun. Someone do something 🍰",
+    "Come on, bums. Dixie didn't walk 6km at sunrise just to see this mess",
+    "Dixie's ukulele is crying. Handle the ticket before she writes a breakup song about the staff",
+    "If this ticket were a pastry, it'd be stale by now 🤓 ☝️",
+    "Dixie's about to crochet a voodoo cactus with your name on it.",
+    "This ticket's been ignored longer than Dixie's dislike for phonk music 🎶",
+    "Dixie's syrup is bubbling. And not in a romantic way.",
+    "This ticket's been here so long, Dixie's diary has a whole chapter on it",
+    "This ticket's been here so long, it's eligible for a student discount",
+    "If this ticket were a plant, it'd be dead. Water it with your attention, please.",
+    "Dixie's hat is spinning. That means she's about to lasso someone into doing their job.",
+    "This ticket's been sitting longer than Dixie's siblings at dinner waiting for dessert.",
+    "This ticket's been here so long, it's started whispering 'help me' in Morse code",
+    "Dixie's diary entry today: 'Staff still useless. Made a tart to cope.'",
+    "Dixie's ukulele just wrote a sad song about staff neglect. It's called 'Ticket Blues'.",
+    "This ticket's been here longer than Dixie's morning walk. And she walks for miles",
+    "Dixie Luther King has a dream that one day this ticket will be answered",
+    "Even expired tart filling gets more attention than this ticket",
+    "Dixie's about to crochet a tiny angry goat with your name stitched on its butt."
+]
+
 
 class ModmailBot(commands.Bot):
     def __init__(self):
@@ -68,6 +98,10 @@ class ModmailBot(commands.Bot):
         self.loop.create_task(self.timer_task())
         self._connected.set()
 
+    def get_random_ticket_message(self):
+        return f"<@&1392477456232878242> {random.choice(TICKET_MESSAGES)}"
+        # return f" {rnd.choice(TICKET_MESSAGES)}"
+
     async def timer_task(self):
         await self.wait_until_ready()
         while not self.is_closed():
@@ -76,13 +110,24 @@ class ModmailBot(commands.Bot):
                 channel = self.get_channel(t["channel_id"])
                 if not channel:
                     continue
+
                 if t["action"] in ("close", "suspend"):
                     if t["action"] == "suspend":
                         await channel.send("⏰ User did not respond. Closing suspended ticket.")
-                    # Call close_ticket_now directly on the bot
                     await self.close_ticket_now(channel)
 
-            await asyncio.sleep(60)  # prevent tight loop
+                elif t["action"] == "unclaimed":
+                    ticket = await self.db.get_ticket_by_channel(t["channel_id"])
+                    if ticket and not ticket.get("mod_id"):
+                        await channel.send(
+                            content=self.get_random_ticket_message()
+                        )
+
+                # clean up timer after execution
+                await self.db.cancel_ticket_timer(t["channel_id"], t["action"])
+
+            await asyncio.sleep(60)
+
 
 
     async def close_ticket_now(self, channel):
@@ -272,6 +317,7 @@ class ClaimTicketButton(discord.ui.View):
         mod = interaction.user
 
         await bot.db.assign_mod_to_ticket(self.channel_id, mod.id, mod.name)
+        await bot.db.cancel_ticket_timer(self.channel_id, "unclaimed")
 
         await interaction.response.send_message(f"✅ You have claimed this ticket, {mod.mention}.", ephemeral=True)
 
@@ -336,6 +382,13 @@ async def send_category_details(interaction: discord.Interaction, category_key: 
     )
 
     await bot.db.create_ticket_entry(user, ticket_channel, category_id, category_key)
+
+    # print(f"Created ticket channel {ticket_channel.id} for user {user.id} in category {category_key}")
+
+    execute_at = datetime.now(timezone.utc) + timedelta(hours=5)
+    await bot.db.add_ticket_timer(ticket_channel.id, user.id, "unclaimed", execute_at)
+
+    # print(f"Set unclaimed timer for channel {ticket_channel.id} at {execute_at}")
 
     embed = discord.Embed(
         description="🎫 A new ticket has been created.\nClick **Claim Ticket** below to take responsibility.",
